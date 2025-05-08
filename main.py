@@ -58,6 +58,12 @@ def get_item_counts():
 def home():
     return 'SMIRL Square Counter is running!'
 
+@app.route('/', defaults={'path': ''}, methods=['GET', 'POST'])
+@app.route('/<path:path>', methods=['GET', 'POST'])
+def catch_all(path):
+    print(f"⚠️ Caught unknown request: {request.method} {path}")
+    return f"Unknown route: {path}", 404
+
 @app.route('/items-sold.json')
 def items_sold():
     counts = get_item_counts()
