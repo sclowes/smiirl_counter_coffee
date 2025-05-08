@@ -150,5 +150,13 @@ def list_routes():
         output.append(f"{rule.methods} {rule.rule}")
     return "<br>".join(sorted(output))
 
+@app.route('/set-total', methods=['POST'])
+def set_total():
+    data = request.get_json()
+    new_value = int(data.get("value", 0))
+    with open("smirl.json", "w") as f:
+        json.dump({"value": new_value}, f)
+    return jsonify({"message": "Total updated", "value": new_value}), 200
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3000)
