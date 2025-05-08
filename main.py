@@ -80,26 +80,42 @@ def serve_smirl():
 @app.route('/square-webhook', methods=['POST'])
 def square_webhook():
     print("✅ Webhook route triggered")
-    
+
     event = request.json
-    print("Raw event data:")
+    print("Full event payload:")
     print(json.dumps(event, indent=2))
 
-    if event.get("type") == "order.updated":
-        order = event.get("data", {}).get("object", {}).get("order", {})
-        state = order.get("state", "")
-        print("Order state:", state)
+    # Extract the order from the nested payload
+    order = (
+        event.get("data", {})
+             .get("object", {})
+             .get("order", {})
+    )
 
-        if state == "COMPLETED":
-            line_items = order.get("line_items", [])
-            print("Line items:", line_items)
+    state = order.get("state", "")
+    print("Order state:", state)
 
-            # Total from the posted payload (not API call)
-            total = sum(int(item.get("quantity", 0)) for item in line_items)
-            print("Calculated total:", total)
+    if state == "COMPLETED":
+        line_items = order.get("line_items", [])
+        print("Line items:", line_items)
 
-            with open("smirl.json", "w") as f:
-                json.dump({"value": total}, f)
+        # Calculate the quantity in this webhook
+        total = sum(int(item.get("quantity", 0)) for item in line_items)
+        print("Webhook item total:", total)
+
+        # Read the existing smirl.json total
+        try:
+            with open("smirl.json", "r") as f:
+                current = json.load(f).get("value", 0)
+        except FileNotFoundError:
+            current = 0
+
+        new_total = current + total
+        print(f"New accumulated total: {new_total}")
+
+        # Write the updated total
+        with open("smirl.json", "w") as f:
+            json.dump({"value": new_total}, f)
 
     return '', 200
 
