@@ -81,7 +81,7 @@ def serve_smirl():
 def square_webhook():
     print("✅ Webhook route triggered")
 
-    #event = request.json
+    event = request.json
     #print("Raw webhook payload:")
     #print(json.dumps(event, indent=2))
 
