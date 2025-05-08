@@ -92,5 +92,12 @@ def square_webhook():
                 json.dump({"value": total}, f)
     return '', 200
 
+@app.route('/routes', methods=['GET'])
+def list_routes():
+    output = []
+    for rule in app.url_map.iter_rules():
+        output.append(f"{rule.methods} {rule.rule}")
+    return "<br>".join(sorted(output))
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3000)
