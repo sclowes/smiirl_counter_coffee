@@ -82,10 +82,10 @@ def square_webhook():
     print("✅ Webhook route triggered")
 
     event = request.json
-    print("Raw webhook:")
+    print("Raw webhook payload:")
     print(json.dumps(event, indent=2))
 
-    # Extract order ID from webhook payload
+    # Extract order_id from webhook
     order_id = (
         event.get("data", {})
              .get("object", {})
@@ -94,12 +94,12 @@ def square_webhook():
     )
 
     if not order_id:
-        print("❌ No order_id found in webhook.")
+        print("❌ No order_id found in webhook payload.")
         return '', 400
 
-    print(f"Fetching full order from Square: {order_id}")
+    print(f"➡️ Fetching full order from Square for order_id: {order_id}")
 
-    # Call Square Orders API to get full order details
+    # Prepare API request
     headers = {
         "Authorization": f"Bearer {os.environ.get('SQUARE_TOKEN')}",
         "Content-Type": "application/json"
@@ -110,19 +110,24 @@ def square_webhook():
         headers=headers
     )
 
+    print(f"Square API response status: {response.status_code}")
+    print("Square API response body:")
+    print(response.text)
+
     if response.status_code != 200:
-        print(f"❌ Failed to fetch order: {response.status_code}")
-        print(response.text)
+        print("❌ Failed to fetch order from Square.")
         return '', 500
 
     order_data = response.json().get("order", {})
     line_items = order_data.get("line_items", [])
 
-    # Calculate quantity from line_items
-    total = sum(int(item.get("quantity", 0)) for item in line_items)
-    print(f"Total items from order {order_id}: {total}")
+    print("✅ Fetched line_items:", line_items)
 
-    # Read current smirl value
+    # Calculate quantity from items
+    total = sum(int(item.get("quantity", 0)) for item in line_items)
+    print(f"Total items in this order: {total}")
+
+    # Load existing smirl.json
     try:
         with open("smirl.json", "r") as f:
             current = json.load(f).get("value", 0)
@@ -130,8 +135,9 @@ def square_webhook():
         current = 0
 
     new_total = current + total
-    print(f"New accumulated total: {new_total}")
+    print(f"Updating smirl.json: {current} + {total} = {new_total}")
 
+    # Save updated total
     with open("smirl.json", "w") as f:
         json.dump({"value": new_total}, f)
 
