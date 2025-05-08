@@ -1,4 +1,6 @@
+
 from flask import Flask, jsonify, request
+from flask_sqlalchemy import SQLAlchemy
 import requests
 import os
 import json
@@ -7,6 +9,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
+
+# PostgreSQL DB setup (Railway sets this automatically)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# Persistent counter model
+class Counter(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    value = db.Column(db.Integer, default=0)
+
+with app.app_context():
+    db.create_all()
+    if not Counter.query.get(1):
+        db.session.add(Counter(id=1, value=0))
+        db.session.commit()
 
 SQUARE_ACCESS_TOKEN = os.environ.get("SQUARE_TOKEN")
 LOCATION_ID = os.environ.get("SQUARE_LOCATION")
@@ -71,21 +89,15 @@ def items_sold():
 
 @app.route('/smirl.json')
 def serve_smirl():
-    try:
-        with open("smirl.json", "r") as f:
-            return jsonify(json.load(f))
-    except FileNotFoundError:
-        return jsonify({"value": -1000})
+    counter = Counter.query.get(1)
+    return jsonify({"value": counter.value})
 
 @app.route('/square-webhook', methods=['POST'])
 def square_webhook():
     print("✅ Webhook route triggered")
 
     event = request.json
-    #print("Raw webhook payload:")
-    #print(json.dumps(event, indent=2))
 
-    # Extract order_id from webhook
     order_id = (
         event.get("data", {})
              .get("object", {})
@@ -99,9 +111,8 @@ def square_webhook():
 
     print(f"➡️ Fetching full order from Square for order_id: {order_id}")
 
-    # Prepare API request
     headers = {
-        "Authorization": f"Bearer {os.environ.get('SQUARE_TOKEN')}",
+        "Authorization": f"Bearer {SQUARE_ACCESS_TOKEN}",
         "Content-Type": "application/json"
     }
 
@@ -123,25 +134,23 @@ def square_webhook():
 
     print("✅ Fetched line_items:", line_items)
 
-    # Calculate quantity from items
     total = sum(int(item.get("quantity", 0)) for item in line_items)
     print(f"Total items in this order: {total}")
 
-    # Load existing smirl.json
-    try:
-        with open("smirl.json", "r") as f:
-            current = json.load(f).get("value", 0)
-    except FileNotFoundError:
-        current = 0
-
-    new_total = current + total
-    print(f"Updating smirl.json: {current} + {total} = {new_total}")
-
-    # Save updated total
-    with open("smirl.json", "w") as f:
-        json.dump({"value": new_total}, f)
+    counter = Counter.query.get(1)
+    counter.value += total
+    db.session.commit()
 
     return '', 200
+
+@app.route('/set-total', methods=['POST'])
+def set_total():
+    data = request.get_json()
+    new_value = int(data.get("value", 0))
+    counter = Counter.query.get(1)
+    counter.value = new_value
+    db.session.commit()
+    return jsonify({"message": "Total updated", "value": new_value}), 200
 
 @app.route('/routes', methods=['GET'])
 def list_routes():
@@ -149,14 +158,6 @@ def list_routes():
     for rule in app.url_map.iter_rules():
         output.append(f"{rule.methods} {rule.rule}")
     return "<br>".join(sorted(output))
-
-@app.route('/set-total', methods=['POST'])
-def set_total():
-    data = request.get_json()
-    new_value = int(data.get("value", 0))
-    with open("smirl.json", "w") as f:
-        json.dump({"value": new_value}, f)
-    return jsonify({"message": "Total updated", "value": new_value}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3000)
