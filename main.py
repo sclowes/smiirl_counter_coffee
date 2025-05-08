@@ -73,6 +73,7 @@ def serve_smirl():
 
 @app.route('/square-webhook', methods=['POST'])
 def square_webhook():
+    print("✅ Webhook route triggered") 
     event = request.json
     if event.get("type") == "order.updated":
         order = event.get("data", {}).get("object", {}).get("order", {})
