@@ -79,17 +79,28 @@ def serve_smirl():
 
 @app.route('/square-webhook', methods=['POST'])
 def square_webhook():
-    print("✅ Webhook route triggered") 
+    print("✅ Webhook route triggered")
+    
     event = request.json
+    print("Raw event data:")
+    print(json.dumps(event, indent=2))
+
     if event.get("type") == "order.updated":
         order = event.get("data", {}).get("object", {}).get("order", {})
         state = order.get("state", "")
+        print("Order state:", state)
+
         if state == "COMPLETED":
-            print("New completed order received via webhook!")
-            item_counts = get_item_counts()
-            total = sum(item_counts.values())
+            line_items = order.get("line_items", [])
+            print("Line items:", line_items)
+
+            # Total from the posted payload (not API call)
+            total = sum(int(item.get("quantity", 0)) for item in line_items)
+            print("Calculated total:", total)
+
             with open("smirl.json", "w") as f:
                 json.dump({"value": total}, f)
+
     return '', 200
 
 @app.route('/routes', methods=['GET'])
