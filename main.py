@@ -130,6 +130,12 @@ def square_webhook():
         return '', 500
 
     order_data = response.json().get("order", {})
+    state = order_data.get("state", "")
+    
+    if state != "COMPLETED":
+        print(f"Skipping order {order_id} with state: {state}")
+        return '', 200
+    
     line_items = order_data.get("line_items", [])
 
     print("✅ Fetched line_items:", line_items)
