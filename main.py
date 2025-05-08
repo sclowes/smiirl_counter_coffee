@@ -69,7 +69,7 @@ def serve_smirl():
         with open("smirl.json", "r") as f:
             return jsonify(json.load(f))
     except FileNotFoundError:
-        return jsonify({"value": 0})
+        return jsonify({"value": -1000})
 
 @app.route('/square-webhook', methods=['POST'])
 def square_webhook():
