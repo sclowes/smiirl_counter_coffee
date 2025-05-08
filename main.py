@@ -82,40 +82,58 @@ def square_webhook():
     print("✅ Webhook route triggered")
 
     event = request.json
-    print("Full event payload:")
+    print("Raw webhook:")
     print(json.dumps(event, indent=2))
 
-    # Extract the order from the nested payload
-    order = (
+    # Extract order ID from webhook payload
+    order_id = (
         event.get("data", {})
              .get("object", {})
-             .get("order", {})
+             .get("order_updated", {})
+             .get("order_id")
     )
 
-    state = order.get("state", "")
-    print("Order state:", state)
+    if not order_id:
+        print("❌ No order_id found in webhook.")
+        return '', 400
 
-    if state == "COMPLETED":
-        line_items = order.get("line_items", [])
-        print("Line items:", line_items)
+    print(f"Fetching full order from Square: {order_id}")
 
-        # Calculate the quantity in this webhook
-        total = sum(int(item.get("quantity", 0)) for item in line_items)
-        print("Webhook item total:", total)
+    # Call Square Orders API to get full order details
+    headers = {
+        "Authorization": f"Bearer {os.environ.get('SQUARE_TOKEN')}",
+        "Content-Type": "application/json"
+    }
 
-        # Read the existing smirl.json total
-        try:
-            with open("smirl.json", "r") as f:
-                current = json.load(f).get("value", 0)
-        except FileNotFoundError:
-            current = 0
+    response = requests.get(
+        f"https://connect.squareup.com/v2/orders/{order_id}",
+        headers=headers
+    )
 
-        new_total = current + total
-        print(f"New accumulated total: {new_total}")
+    if response.status_code != 200:
+        print(f"❌ Failed to fetch order: {response.status_code}")
+        print(response.text)
+        return '', 500
 
-        # Write the updated total
-        with open("smirl.json", "w") as f:
-            json.dump({"value": new_total}, f)
+    order_data = response.json().get("order", {})
+    line_items = order_data.get("line_items", [])
+
+    # Calculate quantity from line_items
+    total = sum(int(item.get("quantity", 0)) for item in line_items)
+    print(f"Total items from order {order_id}: {total}")
+
+    # Read current smirl value
+    try:
+        with open("smirl.json", "r") as f:
+            current = json.load(f).get("value", 0)
+    except FileNotFoundError:
+        current = 0
+
+    new_total = current + total
+    print(f"New accumulated total: {new_total}")
+
+    with open("smirl.json", "w") as f:
+        json.dump({"value": new_total}, f)
 
     return '', 200
 
