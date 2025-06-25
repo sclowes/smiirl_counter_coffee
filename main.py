@@ -13,7 +13,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-SQUARE_ACCESS_TOKEN = os.getenv("SQUARE_ACCESS_TOKEN")
+SQUARE_ACCESS_TOKEN = os.getenv("SQUARE_TOKEN")
 
 class Counter(db.Model):
     id = db.Column(db.Integer, primary_key=True)
