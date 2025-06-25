@@ -1,112 +1,63 @@
-
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
-import requests
 import os
+import requests
 import json
-from dotenv import load_dotenv
-
-load_dotenv()
 
 app = Flask(__name__)
-
-# PostgreSQL DB setup (Railway sets this automatically)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 db = SQLAlchemy(app)
 
-# Persistent counter model
+SQUARE_ACCESS_TOKEN = os.environ.get('SQUARE_TOKEN')
+
+TARGET_ITEMS = {
+    "Americano",
+    "CBD Coffee Americano",
+    "CBD Coffee Latte",
+    "Cappuccino",
+    "Cortado",
+    "Espresso",
+    "Filter Coffee",
+    "Flat White",
+    "Latte",
+    "Long Black",
+    "Macchiato",
+    "Mocha",
+    "Mushroom Coffee Americano",
+    "Mushroom Coffee Latte",
+    "Mushroom Mocha",
+    "V60",
+    "Iced Americano",
+    "Iced Latte",
+    "Iced Mocha",
+}
+
 class Counter(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     value = db.Column(db.Integer, default=0)
 
-with app.app_context():
+@app.before_first_request
+def create_tables():
     db.create_all()
     if not Counter.query.get(1):
         db.session.add(Counter(id=1, value=0))
         db.session.commit()
 
-SQUARE_ACCESS_TOKEN = os.environ.get("SQUARE_TOKEN")
-LOCATION_ID = os.environ.get("SQUARE_LOCATION")
-
-TRACKED_ITEMS = [
-    "Americano", "CBD Coffee Americano", "CBD Coffee Latte", "Cappuccino", "Cortado",
-    "Espresso", "Filter Coffee", "Flat White", "Latte", "Long Black", "Macchiato", "Mocha",
-    "Mushroom Coffee Americano", "Mushroom Coffee Latte", "Mushroom Mocha", "V60",
-    "Iced Americano", "Iced Latte", "Iced Mocha"
-]
-
-def get_item_counts():
-    url = "https://connect.squareup.com/v2/orders/search"
-    headers = {
-        "Authorization": f"Bearer {SQUARE_ACCESS_TOKEN}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "location_ids": [LOCATION_ID],
-        "query": {
-            "filter": {
-                "state_filter": {
-                    "states": ["COMPLETED"]
-                }
-            }
-        }
-    }
-
-    response = requests.post(url, json=payload, headers=headers)
-
-    if response.status_code != 200:
-        print("Square API Error:", response.status_code, response.text)
-        return {}
-
-    orders = response.json().get("orders", [])
-    item_counts = {item: 0 for item in TRACKED_ITEMS}
-
-    for order in orders:
-        for item in order.get("line_items", []):
-            name = item["name"]
-            qty = int(item.get("quantity", 0))
-            if name in item_counts:
-                item_counts[name] += qty
-
-    return item_counts
-
-@app.route('/')
-def home():
-    return 'SMIRL Square Counter is running!'
-
-@app.route('/', defaults={'path': ''}, methods=['GET', 'POST'])
-@app.route('/<path:path>', methods=['GET', 'POST'])
-def catch_all(path):
-    print(f"⚠️ Caught unknown request: {request.method} {path}")
-    return f"Unknown route: {path}", 404
-
-@app.route('/items-sold.json')
-def items_sold():
-    counts = get_item_counts()
-    return jsonify(counts)
-
-@app.route('/smirl.json')
-def serve_smirl():
-    counter = Counter.query.get(1)
-    return jsonify({"value": counter.value})
-
-@app.route('/square-webhook', methods=['POST'])
+@app.route("/square-webhook", methods=["POST"])
 def square_webhook():
     print("✅ Webhook route triggered")
-
     event = request.json
+    print("Raw webhook payload:\n", json.dumps(event, indent=2))
 
-    order_id = (
-        event.get("data", {})
-             .get("object", {})
-             .get("order_updated", {})
-             .get("order_id")
-    )
+    if event.get("type") != "payment.created":
+        print("❌ Not a payment.created event.")
+        return '', 200
+
+    payment = event.get("data", {}).get("object", {}).get("payment", {})
+    order_id = payment.get("order_id")
 
     if not order_id:
-        print("❌ No order_id found in webhook payload.")
+        print("❌ No order_id found in payment payload.")
         return '', 400
 
     print(f"➡️ Fetching full order from Square for order_id: {order_id}")
@@ -130,40 +81,40 @@ def square_webhook():
         return '', 500
 
     order_data = response.json().get("order", {})
-    state = order_data.get("state", "")
-    
-    if state != "COMPLETED":
-        print(f"Skipping order {order_id} with state: {state}")
-        return '', 200
-    
     line_items = order_data.get("line_items", [])
 
     print("✅ Fetched line_items:", line_items)
 
-    total = sum(int(item.get("quantity", 0)) for item in line_items)
-    print(f"Total items in this order: {total}")
+    total = 0
+    for item in line_items:
+        name = item.get("name")
+        qty = int(item.get("quantity", 0))
+        if name in TARGET_ITEMS:
+            total += qty
+            print(f"✅ Counted {qty} of {name}")
+        else:
+            print(f"⏭️ Skipped item: {name}")
 
-    counter = Counter.query.get(1)
-    counter.value += total
-    db.session.commit()
+    if total > 0:
+        counter = Counter.query.get(1)
+        counter.value += total
+        db.session.commit()
+        print(f"📈 Updated counter by {total} → new value: {counter.value}")
 
     return '', 200
 
-@app.route('/set-total', methods=['POST'])
+@app.route("/smirl.json")
+def serve_smirl():
+    counter = Counter.query.get(1)
+    return jsonify({"value": counter.value if counter else -1000})
+
+@app.route("/set-total", methods=["POST"])
 def set_total():
     data = request.get_json()
-    new_value = int(data.get("value", 0))
-    counter = Counter.query.get(1)
-    counter.value = new_value
-    db.session.commit()
-    return jsonify({"message": "Total updated", "value": new_value}), 200
-
-@app.route('/routes', methods=['GET'])
-def list_routes():
-    output = []
-    for rule in app.url_map.iter_rules():
-        output.append(f"{rule.methods} {rule.rule}")
-    return "<br>".join(sorted(output))
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3000)
+    value = data.get("value")
+    if isinstance(value, int) and value >= 0:
+        counter = Counter.query.get(1)
+        counter.value = value
+        db.session.commit()
+        return jsonify({"message": "Total updated", "value": value})
+    return jsonify({"error": "Invalid value"}), 400
