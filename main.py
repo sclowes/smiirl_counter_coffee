@@ -45,13 +45,18 @@ class Counter(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     value = db.Column(db.Integer, default=0)
 
-# Initialize the counter if not exists
-@app.before_first_request
-def setup():
-    db.create_all()
-    if not Counter.query.get(1):
-        db.session.add(Counter(id=1, value=0))
-        db.session.commit()
+# Run setup once before first request
+initialized = False
+
+@app.before_request
+def setup_once():
+    global initialized
+    if not initialized:
+        db.create_all()
+        if not Counter.query.get(1):
+            db.session.add(Counter(id=1, value=0))
+            db.session.commit()
+        initialized = True
 
 # Serve smirl JSON
 @app.route("/smirl.json")
@@ -74,7 +79,7 @@ def set_total():
 # Square webhook handler
 @app.route("/square-webhook", methods=["POST"])
 def square_webhook():
-    print("\u2705 Webhook route triggered")
+    print("✅ Webhook route triggered")
 
     event = request.json
 
@@ -82,7 +87,7 @@ def square_webhook():
     order_id = payment_data.get("order_id")
 
     if not order_id:
-        print("\u274C No order_id found in payment payload.")
+        print("❌ No order_id found in payment payload.")
         return '', 400
 
     print(f"➡️ Fetching full order from Square for order_id: {order_id}")
@@ -102,7 +107,7 @@ def square_webhook():
     print(response.text)
 
     if response.status_code != 200:
-        print("\u274C Failed to fetch order from Square.")
+        print("❌ Failed to fetch order from Square.")
         return '', 500
 
     order_data = response.json().get("order", {})
@@ -121,4 +126,5 @@ def square_webhook():
     return '', 200
 
 if __name__ == "__main__":
+    print("📦 Flask app starting up...")
     app.run(host="0.0.0.0", port=8080)
