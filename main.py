@@ -87,7 +87,8 @@ def square_webhook():
     payment_data = event.get("data", {}).get("object", {}).get("payment", {})
     order_id = payment_data.get("order_id")
     location_id = payment_data.get("location_id")
-
+    print(f"Location_id: {location_id}")
+    
     if not order_id:
         print("❌ No order_id found in payment payload.")
         return '', 400
