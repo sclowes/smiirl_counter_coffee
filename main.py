@@ -10,6 +10,7 @@ load_dotenv()
 
 SQUARE_TOKEN = os.getenv("SQUARE_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
+ALLOWED_LOCATION_ID = os.getenv("SQUARE_LOCATION")
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
@@ -85,10 +86,15 @@ def square_webhook():
 
     payment_data = event.get("data", {}).get("object", {}).get("payment", {})
     order_id = payment_data.get("order_id")
+    location_id = payment_data.get("location_id")
 
     if not order_id:
         print("❌ No order_id found in payment payload.")
         return '', 400
+
+    if location_id != ALLOWED_LOCATION_ID:
+        print(f"🚫 Ignored webhook from location_id: {location_id}")
+        return '', 200  # Gracefully ignore, no error
 
     print(f"➡️ Fetching full order from Square for order_id: {order_id}")
 
