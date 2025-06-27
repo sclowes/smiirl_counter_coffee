@@ -128,9 +128,11 @@ def square_webhook():
 
     total = sum(int(item.get("quantity", 0)) for item in line_items if item.get("name") in TARGET_ITEMS)
     print(f"Total coffee items in this order: {total}")
-
+    
     counter = Counter.query.get(1)
+    print(f"Counter Value: {counter.value}")
     counter.value += total
+    print(f"Counter Updated: {counter.value}")
     db.session.commit()
 
     return '', 200
