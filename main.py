@@ -80,24 +80,24 @@ def set_total():
 # Square webhook handler
 @app.route("/square-webhook", methods=["POST"])
 def square_webhook():
-    print("✅ Webhook route triggered")
+    #print("✅ Webhook route triggered")
 
     event = request.json
 
     payment_data = event.get("data", {}).get("object", {}).get("payment", {})
     order_id = payment_data.get("order_id")
     location_id = payment_data.get("location_id")
-    print(f"Location_id: {location_id}")
+    #print(f"Location_id: {location_id}")
     
     if not order_id:
-        print("❌ No order_id found in payment payload.")
+        #print("❌ No order_id found in payment payload.")
         return '', 400
 
     if location_id != ALLOWED_LOCATION_ID:
-        print(f"🚫 Ignored webhook from location_id: {location_id}")
+        #print(f"🚫 Ignored webhook from location_id: {location_id}")
         return '', 200  # Gracefully ignore, no error
 
-    print(f"➡️ Fetching full order from Square for order_id: {order_id}")
+    #print(f"➡️ Fetching full order from Square for order_id: {order_id}")
 
     headers = {
         "Authorization": f"Bearer {SQUARE_TOKEN}",
@@ -109,19 +109,22 @@ def square_webhook():
         headers=headers
     )
 
-    print(f"Square API response status: {response.status_code}")
-    print("Square API response body:")
-    print(response.text)
+    #print(f"Square API response status: {response.status_code}")
+    #print("Square API response body:")
+    #print(response.text)
 
     if response.status_code != 200:
-        print("❌ Failed to fetch order from Square.")
+        #print("❌ Failed to fetch order from Square.")
         return '', 500
 
     order_data = response.json().get("order", {})
     line_items = order_data.get("line_items", [])
 
+    print(f"Webhook route triggered for Order: {order_id} at Location: {location_id}")
+    print(f"Order_data: {order_data}")
+    
     filtered_items = [item["name"] for item in line_items if item.get("name") in TARGET_ITEMS]
-    print(f"✅ Counted items: {filtered_items}")
+    print(f"Counted items: {filtered_items}")
 
     total = sum(int(item.get("quantity", 0)) for item in line_items if item.get("name") in TARGET_ITEMS)
     print(f"Total coffee items in this order: {total}")
